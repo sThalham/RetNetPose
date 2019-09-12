@@ -21,13 +21,8 @@ from .. import backend
 def filter_detections(
     boxes,
     boxes3D,
-    #translations,
-    #depths,
-    #rotations,
-    #roll,
-    #pitch,
-    #yaw,
     classification,
+    features,
     other                 = [],
     class_specific_filter = True,
     nms                   = True,
@@ -98,28 +93,34 @@ def filter_detections(
     # filter input using the final set of indices
     indices             = keras.backend.gather(indices[:, 0], top_indices)
     boxes               = keras.backend.gather(boxes, indices)
-    boxes3D = keras.backend.gather(boxes3D, indices)
+    boxes3D             = keras.backend.gather(boxes3D, indices)
     labels              = keras.backend.gather(labels, top_indices)
+    features            = keras.backend.gather(features, top_indices)
     other_              = [keras.backend.gather(o, indices) for o in other]
 
     # zero pad the outputs
     pad_size = keras.backend.maximum(0, max_detections - keras.backend.shape(scores)[0])
     boxes    = backend.pad(boxes, [[0, pad_size], [0, 0]], constant_values=-1)
-    boxes3D = backend.pad(boxes3D, [[0, pad_size], [0, 0], [0, 0]], constant_values=-1)
+    #boxes3D = backend.pad(boxes3D, [[0, pad_size], [0, 0], [0, 0]], constant_values=-1)
+    boxes3D = backend.pad(boxes3D, [[0, pad_size], [0, 0]], constant_values=-1)
     scores   = backend.pad(scores, [[0, pad_size]], constant_values=-1)
     labels   = backend.pad(labels, [[0, pad_size]], constant_values=-1)
     labels   = keras.backend.cast(labels, 'int32')
+    features = backend.pad(features, [[0, pad_size]], constant_values=-1)
+    features = keras.backend.cast(features, 'int32')
     other_   = [backend.pad(o, [[0, pad_size]] + [[0, 0] for _ in range(1, len(o.shape))], constant_values=-1) for o in other_]
 
     # set shapes, since we know what they are
     boxes.set_shape([max_detections, 4])
-    boxes3D.set_shape([max_detections, 15, 16])
+    #boxes3D.set_shape([max_detections, 15, 16])
+    boxes3D.set_shape([max_detections, 16])
     scores.set_shape([max_detections])
     labels.set_shape([max_detections])
+    features.set_shape([max_detections])
     for o, s in zip(other_, [list(keras.backend.int_shape(o)) for o in other]):
         o.set_shape([max_detections] + s[1:])
 
-    return [boxes, boxes3D, scores, labels] + other_
+    return [boxes, boxes3D, scores, labels, features] + other_
 
 
 class FilterDetections(keras.layers.Layer):
@@ -163,19 +164,22 @@ class FilterDetections(keras.layers.Layer):
         boxes = inputs[0]
         boxes3D = inputs[1]
         classification = inputs[2]
-        other = inputs[3:]
+        features = inputs[3]
+        other = inputs[4:]
 
         # wrap nms with our parameters
         def _filter_detections(args):
             boxes = args[0]
             boxes3D = args[1]
             classification = args[2]
-            other = args[3]
+            features = args[3]
+            other = args[4]
 
             return filter_detections(
                 boxes,
                 boxes3D,
                 classification,
+                features,
                 other,
                 nms                   = self.nms,
                 class_specific_filter = self.class_specific_filter,
@@ -187,8 +191,8 @@ class FilterDetections(keras.layers.Layer):
         # call filter_detections on each batch
         outputs = backend.map_fn(
             _filter_detections,
-            elems=[boxes, boxes3D, classification, other],
-            dtype=[keras.backend.floatx(), keras.backend.floatx(), keras.backend.floatx(), 'int32'] + [o.dtype for o in other],
+            elems=[boxes, boxes3D, classification, features, other],
+            dtype=[keras.backend.floatx(), keras.backend.floatx(), keras.backend.floatx(), keras.backend.floatx(), 'int32'] + [o.dtype for o in other],
             parallel_iterations=self.parallel_iterations
         )
 
@@ -206,11 +210,13 @@ class FilterDetections(keras.layers.Layer):
         """
         return [
             (input_shape[0][0], self.max_detections, 4),
-            (input_shape[1][0], self.max_detections, 15, 16),
+            #(input_shape[1][0], self.max_detections, 15, 16),
+            (input_shape[1][0], self.max_detections, 16),
             (input_shape[2][0], self.max_detections),
             (input_shape[2][0], self.max_detections),
+            (input_shape[3][0], self.max_detections, 8),
         ] + [
-            tuple([input_shape[i][0], self.max_detections] + list(input_shape[i][3:])) for i in range(3, len(input_shape))
+            tuple([input_shape[i][0], self.max_detections] + list(input_shape[i][4:])) for i in range(4, len(input_shape))
         ]
 
     def compute_mask(self, inputs, mask=None):

@@ -29,7 +29,7 @@ def _isArrayLike(obj):
     return hasattr(obj, '__iter__') and hasattr(obj, '__len__')
 
 
-class LinemodGenerator(Generator):
+class LinemodFeatselGenerator(Generator):
     """ Generate data from the LineMOD dataset.
     """
 
@@ -174,7 +174,7 @@ class LinemodGenerator(Generator):
         lists = [self.imgToAnns[imgId] for imgId in ids if imgId in self.imgToAnns]
         anns = list(itertools.chain.from_iterable(lists))
 
-        annotations     = {'labels': np.empty((0,)), 'bboxes': np.empty((0, 4)), 'poses': np.empty((0, 6)), 'segmentations': np.empty((0, 16))}
+        annotations     = {'labels': np.empty((0,)), 'bboxes': np.empty((0, 4)), 'poses': np.empty((0, 6)), 'segmentations': np.empty((0, 16)), 'features': np.empty((0, 8))}
 
         for idx, a in enumerate(anns):
 
@@ -214,6 +214,16 @@ class LinemodGenerator(Generator):
                 a['segmentation'][13],
                 a['segmentation'][14],
                 a['segmentation'][15],
+            ]]], axis=0)
+            annotations['features'] = np.concatenate([annotations['features'], [[
+                a['feature_visibility'][0],
+                a['feature_visibility'][1],
+                a['feature_visibility'][2],
+                a['feature_visibility'][3],
+                a['feature_visibility'][4],
+                a['feature_visibility'][5],
+                a['feature_visibility'][6],
+                a['feature_visibility'][7],
             ]]], axis=0)
 
         return annotations

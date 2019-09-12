@@ -107,6 +107,53 @@ def default_classification_model(
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
 
+def default_features_model(
+    num_classes,
+    num_anchors,
+    num_features,
+    pyramid_feature_size=256,
+    prior_probability=0.01,
+    classification_feature_size=256,
+    name='classification_submodel'
+):
+    options = {
+        'kernel_size' : 3,
+        'strides'     : 1,
+        'padding'     : 'same',
+    }
+
+    if keras.backend.image_data_format() == 'channels_first':
+        inputs  = keras.layers.Input(shape=(pyramid_feature_size, None, None))
+    else:
+        inputs  = keras.layers.Input(shape=(None, None, pyramid_feature_size))
+    outputs = inputs
+    for i in range(4):
+        outputs = keras.layers.Conv2D(
+            filters=classification_feature_size,
+            activation='relu',
+            name='pyramid_feature_selection_{}'.format(i),
+            kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
+            bias_initializer='zeros',
+            **options
+        )(outputs)
+
+    outputs = keras.layers.Conv2D(
+        filters=num_classes * num_anchors,
+        kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
+        bias_initializer=initializers.PriorProbability(probability=prior_probability),
+        name='pyramid_features_selection',
+        **options
+    )(outputs)
+
+    # reshape output and apply sigmoid
+    if keras.backend.image_data_format() == 'channels_first':
+        outputs = keras.layers.Permute((2, 3, 1), name='pyramid_feature_selection_permute')(outputs)
+    outputs = keras.layers.Reshape((-1, num_features), name='pyramid_feature_selection_reshape')(outputs)
+    outputs = keras.layers.Activation('sigmoid', name='pyramid_feature_selection_sigmoid')(outputs)
+
+    return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
+
+
 def default_regression_model(num_values, num_anchors, pyramid_feature_size=256, regression_feature_size=256, name='regression_submodel'):
     """ Creates the default regression submodel.
 
@@ -190,12 +237,12 @@ def default_3Dregression_model(num_values, num_anchors, num_classes, pyramid_fea
             **options
         )(outputs)
 
-    outputs = keras.layers.Conv2D(num_anchors * num_classes * num_values, name='pyramid_regression3D', **options)(outputs)
+    #outputs = keras.layers.Conv2D(num_anchors * num_classes * num_values, name='pyramid_regression3D', **options)(outputs)
+    outputs = keras.layers.Conv2D(num_anchors * num_values, name='pyramid_regression3D', **options)(outputs)
     if keras.backend.image_data_format() == 'channels_first':
         outputs = keras.layers.Permute((2, 3, 1), name='pyramid_regression3D_permute')(outputs)
-    outputs = keras.layers.Reshape((-1, num_classes, num_values), name='pyramid_regression3D_reshape')(outputs)
-
-    print(outputs)
+    #outputs = keras.layers.Reshape((-1, num_classes, num_values), name='pyramid_regression3D_reshape')(outputs)
+    outputs = keras.layers.Reshape((-1, num_values), name='pyramid_regression3D_reshape')(outputs)
 
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
@@ -309,31 +356,11 @@ def default_submodels(num_classes, num_anchors):
     Returns
         A list of tuple, where the first element is the name of the submodel and the second element is the submodel itself.
     """
-
-    #return [
-    #    ('bbox', default_regression_model(4, num_anchors)),
-    #    ('3Dbox_1', default_3Dregression_model(16, num_anchors, 15)[0]),
-    #    ('3Dbox_2', default_3Dregression_model(16, num_anchors, 15)[1]),
-    #    ('3Dbox_3', default_3Dregression_model(16, num_anchors, 15)[2]),
-    #    ('3Dbox_4', default_3Dregression_model(16, num_anchors, 15)[3]),
-    #    ('3Dbox_5', default_3Dregression_model(16, num_anchors, 15)[4]),
-    #    ('3Dbox_6', default_3Dregression_model(16, num_anchors, 15)[5]),
-    #    ('3Dbox_7', default_3Dregression_model(16, num_anchors, 15)[6]),
-    #    ('3Dbox_8', default_3Dregression_model(16, num_anchors, 15)[7]),
-    #    ('3Dbox_9', default_3Dregression_model(16, num_anchors, 15)[8]),
-    #    ('3Dbox_10', default_3Dregression_model(16, num_anchors, 15)[9]),
-    #    ('3Dbox_11', default_3Dregression_model(16, num_anchors, 15)[10]),
-    #    ('3Dbox_12', default_3Dregression_model(16, num_anchors, 15)[11]),
-    #    ('3Dbox_13', default_3Dregression_model(16, num_anchors, 15)[12]),
-    #    ('3Dbox_14', default_3Dregression_model(16, num_anchors, 15)[13]),
-    #    ('3Dbox_15', default_3Dregression_model(16, num_anchors, 15)[14]),
-    #    ('cls', default_classification_model(num_classes, num_anchors))
-    #]
-
     return [
         ('bbox', default_regression_model(4, num_anchors)),
         ('3Dbox', default_3Dregression_model(16, num_anchors, 15)),
-        ('cls', default_classification_model(num_classes, num_anchors))
+        ('cls', default_classification_model(num_classes, num_anchors)),
+        ('feat', default_features_model(num_classes, num_anchors, 8))
     ]
 
 
@@ -491,7 +518,8 @@ def retinanet_bbox(
     regression = model.outputs[0]
     regression3D = model.outputs[1]
     classification = model.outputs[2]
-    other = model.outputs[3:]
+    feature_selection = model.outputs[3]
+    other = model.outputs[4:]
 
     # apply predicted regression to anchors
     boxes = layers.RegressBoxes(name='boxes')([anchors, regression])
@@ -504,7 +532,7 @@ def retinanet_bbox(
         nms                   = nms,
         class_specific_filter = class_specific_filter,
         name                  = 'filtered_detections'
-    )([boxes, boxes3D, classification] + other)
+    )([boxes, boxes3D, classification, feature_selection] + other)
 
     # construct the model
     return keras.models.Model(inputs=model.inputs, outputs=detections, name=name)

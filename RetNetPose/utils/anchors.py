@@ -45,7 +45,10 @@ The default anchor parameters.
 """
 AnchorParameters.default = AnchorParameters(
     sizes   = [32, 64, 128, 256, 512],
+    #sizes = [16, 32, 64, 128, 256],
+    #sizes = [32, 64, 128, 256],
     strides = [8, 16, 32, 64, 128],
+    #strides = [8, 16, 32, 64], 
     ratios  = np.array([0.5, 1, 2], keras.backend.floatx()),
     scales = np.array([2 ** 0, 2 ** (1.0 / 3.0), 2 ** (2.0 / 3.0)], keras.backend.floatx()),
     #scales  = np.array([1.0], keras.backend.floatx()),   # scales: 1, 1.26, 1.59
@@ -87,12 +90,15 @@ def anchor_targets_bbox(
         assert('labels' in annotations), "Annotations should contain labels."
         assert('poses' in annotations), "Annotations should contain labels."
         assert('segmentations' in annotations), "Annotations should contain poses"
+        assert('features' in annotations), "Annotations should contain features"
 
     batch_size = len(image_group)
 
     regression_batch  = np.zeros((batch_size, anchors.shape[0], 4 + 1), dtype=keras.backend.floatx())
     labels_batch      = np.zeros((batch_size, anchors.shape[0], num_classes + 1), dtype=keras.backend.floatx())
-    regression_3D = np.zeros((batch_size, anchors.shape[0], num_classes, 16 + 1), dtype=keras.backend.floatx())
+    #regression_3D = np.zeros((batch_size, anchors.shape[0], num_classes, 16 + 1), dtype=keras.backend.floatx())
+    regression_3D = np.zeros((batch_size, anchors.shape[0], 16 + 1), dtype=keras.backend.floatx())
+    features_batch = np.zeros((batch_size, anchors.shape[0], 8 + 1), dtype=keras.backend.floatx())
 
     # compute labels and regression targets
     for index, (image, annotations) in enumerate(zip(image_group, annotations_group)):
@@ -103,19 +109,27 @@ def anchor_targets_bbox(
             labels_batch[index, ignore_indices, -1]       = -1
             labels_batch[index, positive_indices, -1]     = 1
 
+            features_batch[index, ignore_indices, -1]     = -1
+            features_batch[index, positive_indices, -1]   = 1
+
             regression_batch[index, ignore_indices, -1]   = -1
             regression_batch[index, positive_indices, -1] = 1
 
-            regression_3D[index, ignore_indices, :, -1] = -1
-            regression_3D[index, positive_indices, :, -1] = -1
+            #regression_3D[index, ignore_indices, :, -1] = -1
+            #regression_3D[index, positive_indices, :, -1] = -1
+            regression_3D[index, ignore_indices, -1] = -1
+            regression_3D[index, positive_indices, -1] = 1
 
             # compute target class labels
             labels_batch[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
 
+            features_batch[index, positive_indices, annotations['features'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
+
             regression_batch[index, :, :-1] = bbox_transform(anchors, annotations['bboxes'][argmax_overlaps_inds, :])
 
-            regression_3D[index, :, :, :-1] = box3D_transform(anchors, annotations['segmentations'][argmax_overlaps_inds, :], num_classes)
-            regression_3D[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int), -1] = 1
+            #regression_3D[index, :, :, :-1] = box3D_transform(anchors, annotations['segmentations'][argmax_overlaps_inds, :], num_classes)
+            #regression_3D[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int), -1] = 1
+            regression_3D[index, :, :-1] = box3D_transform(anchors, annotations['segmentations'][argmax_overlaps_inds, :], num_classes)
 
         # ignore annotations outside of image
         if image.shape:
@@ -124,9 +138,11 @@ def anchor_targets_bbox(
 
             labels_batch[index, indices, -1]     = -1
             regression_batch[index, indices, -1] = -1
-            regression_3D[index, indices, :, -1] = -1
+            #regression_3D[index, indices, :, -1] = -1
+            regression_3D[index, indices, -1] = -1
+            features_batch[index, indices, -1] = -1
 
-    return regression_batch, regression_3D, labels_batch
+    return regression_batch, regression_3D, labels_batch, features_batch
 
 
 def compute_gt_annotations(
@@ -395,8 +411,8 @@ def box3D_transform(anchors, gt_boxes, num_classes, mean=None, std=None):
     targets = targets.T
 
     targets = (targets - mean) / std
-    allTargets = np.repeat(targets[:, np.newaxis, :], num_classes, axis=1)
+    #targets = np.repeat(targets[:, np.newaxis, :], num_classes, axis=1)
 
-    return allTargets
+    return targets
 
 
