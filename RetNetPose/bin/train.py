@@ -122,10 +122,10 @@ def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0,
     training_model.compile(
         loss={
             'bbox'         : losses.smooth_l1(),
-            '3Dbox'        : losses.smooth_l1(),
+            '3Dbox'        : losses.smooth_l1_xy(),
             #'3Dbox'        : losses.orthogonal_l1(),
             'cls'          : losses.focal(),
-            'feat'         : losses.bce()
+            'feat'         : losses.cross()
         },
         optimizer=keras.optimizers.adam(lr=lr, clipnorm=0.001)
     )
@@ -271,19 +271,19 @@ def create_generators(args, preprocess_image):
         from ..preprocessing.linemod_featsel import LinemodFeatselGenerator
 
         train_generator = LinemodFeatselGenerator(
-            args.linemod_path,
+            args.linemod_featsel_path,
             'train',
             transform_generator=transform_generator,
             **common_args
         )
 
-        validation_generator = LinemodGenerator(
-            args.linemod_path,
+        validation_generator = LinemodFeatselGenerator(
+            args.linemod_featsel_path,
             'val',
             transform_generator=transform_generator,
             **common_args
         )
-        train_iterations = len(os.listdir(os.path.join(args.linemod_path, 'images/train'))
+        train_iterations = len(os.listdir(os.path.join(args.linemod_featsel_path, 'images/train')))
 
     else:
         raise ValueError('Invalid data type received: {}'.format(args.dataset_type))
@@ -304,8 +304,8 @@ def parse_args(args):
     linemod_parser = subparsers.add_parser('linemod')
     linemod_parser.add_argument('linemod_path', help='Path to dataset directory (ie. /tmp/linemod).')
 
-    linemod_parser = subparser.add_parser('linemod_featsel')
-    linemod_parser.add_argument('linemod_path', help='Path to dataset directory (ie. /tmp/linemod_featsel).')
+    linemod_featsel_parser = subparsers.add_parser('linemod_featsel')
+    linemod_featsel_parser.add_argument('linemod_featsel_path', help='Path to dataset directory (ie. /tmp/linemod_featsel).')
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--snapshot',          help='Resume training from a snapshot.')

@@ -114,7 +114,7 @@ def default_features_model(
     pyramid_feature_size=256,
     prior_probability=0.01,
     classification_feature_size=256,
-    name='classification_submodel'
+    name='feature_detection_submodel'
 ):
     options = {
         'kernel_size' : 3,
@@ -138,7 +138,7 @@ def default_features_model(
         )(outputs)
 
     outputs = keras.layers.Conv2D(
-        filters=num_classes * num_anchors,
+        filters=num_features * num_anchors,
         kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
         bias_initializer=initializers.PriorProbability(probability=prior_probability),
         name='pyramid_features_selection',

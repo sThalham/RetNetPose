@@ -182,7 +182,7 @@ class LinemodFeatselGenerator(Generator):
             if a['bbox'][2] < 1 or a['bbox'][3] < 1:
                 continue
 
-            annotations['labels'] = np.concatenate([annotations['labels'], [self.inv_label_to_label(a['category_id'])]], annotations['features'], axis=0)
+            annotations['labels'] = np.concatenate([annotations['labels'], [self.inv_label_to_label(a['category_id'])]], axis=0)
             annotations['bboxes'] = np.concatenate([annotations['bboxes'], [[
                 a['bbox'][0],
                 a['bbox'][1],

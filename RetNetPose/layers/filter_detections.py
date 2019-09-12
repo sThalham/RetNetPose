@@ -95,7 +95,7 @@ def filter_detections(
     boxes               = keras.backend.gather(boxes, indices)
     boxes3D             = keras.backend.gather(boxes3D, indices)
     labels              = keras.backend.gather(labels, top_indices)
-    features            = keras.backend.gather(features, top_indices)
+    features            = keras.backend.gather(features, indices)
     other_              = [keras.backend.gather(o, indices) for o in other]
 
     # zero pad the outputs
@@ -106,8 +106,8 @@ def filter_detections(
     scores   = backend.pad(scores, [[0, pad_size]], constant_values=-1)
     labels   = backend.pad(labels, [[0, pad_size]], constant_values=-1)
     labels   = keras.backend.cast(labels, 'int32')
-    features = backend.pad(features, [[0, pad_size]], constant_values=-1)
-    features = keras.backend.cast(features, 'int32')
+    features = backend.pad(features, [[0, pad_size], [0, 0]], constant_values=-1)
+    #features = keras.backend.cast(features, 'int32')
     other_   = [backend.pad(o, [[0, pad_size]] + [[0, 0] for _ in range(1, len(o.shape))], constant_values=-1) for o in other_]
 
     # set shapes, since we know what they are
@@ -116,7 +116,7 @@ def filter_detections(
     boxes3D.set_shape([max_detections, 16])
     scores.set_shape([max_detections])
     labels.set_shape([max_detections])
-    features.set_shape([max_detections])
+    features.set_shape([max_detections, 8])
     for o, s in zip(other_, [list(keras.backend.int_shape(o)) for o in other]):
         o.set_shape([max_detections] + s[1:])
 

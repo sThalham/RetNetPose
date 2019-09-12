@@ -123,7 +123,7 @@ def anchor_targets_bbox(
             # compute target class labels
             labels_batch[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
 
-            features_batch[index, positive_indices, annotations['features'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
+            features_batch[index, :, :-1] = features_transform(anchors, annotations['features'][argmax_overlaps_inds, :])
 
             regression_batch[index, :, :-1] = bbox_transform(anchors, annotations['bboxes'][argmax_overlaps_inds, :])
 
@@ -365,6 +365,26 @@ def bbox_transform(anchors, gt_boxes, mean=None, std=None):
     targets = targets.T
 
     targets = (targets - mean) / std
+
+    return targets
+
+
+def features_transform(anchors, annos):
+    
+    anchor_widths = anchors[:, 2] - anchors[:, 0]
+    anchors_heights = anchors[:, 3] - anchors[:, 1]
+
+    targets_f1 = annos[:, 0]
+    targets_f2 = annos[:, 1]
+    targets_f3 = annos[:, 2]
+    targets_f4 = annos[:, 3]
+    targets_f5 = annos[:, 4]
+    targets_f6 = annos[:, 5]
+    targets_f7 = annos[:, 6]
+    targets_f8 = annos[:, 7]
+
+    targets = np.stack((targets_f1, targets_f2, targets_f3, targets_f4, targets_f5, targets_f6, targets_f7, targets_f8))
+    targets = targets.T
 
     return targets
 
