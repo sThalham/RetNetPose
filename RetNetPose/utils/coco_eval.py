@@ -44,7 +44,7 @@ def evaluate_coco(generator, model, threshold=0.05):
             image = image.transpose((2, 0, 1))
 
         # run network
-        boxes, scores, labels = model.predict_on_batch(np.expand_dims(image, axis=0))
+        boxes, boxes3D, scores, labels = model.predict_on_batch(np.expand_dims(image, axis=0))
 
         # correct boxes for image scale
         boxes /= scale
@@ -58,6 +58,9 @@ def evaluate_coco(generator, model, threshold=0.05):
             # scores are sorted, so we can break
             if score < threshold:
                 break
+
+            if label == 1:
+                continue
 
             # append detection for each positively labeled class
             image_result = {

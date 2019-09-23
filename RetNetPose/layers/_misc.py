@@ -209,6 +209,27 @@ class RegressBoxes3D(keras.layers.Layer):
         return config
 
 
+class ClusterHeatmaps(keras.layers.Layer):
+    """ Keras layer for applying regression values to boxes.
+    """
+
+    def __init__(self, *args, **kwargs):
+
+        super(ClusterHeatmaps, self).__init__(*args, **kwargs)
+
+    def call(self, inputs, **kwargs):
+        anchors, heatmap = inputs
+        return backend.heatmap_transform_inv(anchors, regression, mean=self.mean, std=self.std)
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[0]
+
+    def get_config(self):
+        config = super(ClusterHeatmaps, self).get_config()
+
+        return config
+
+
 class ClipBoxes(keras.layers.Layer):
     """ Keras layer to clip box values to lie inside a given shape.
     """

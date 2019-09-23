@@ -21,6 +21,7 @@ import os
 import sys
 import warnings
 
+import keras_resnet
 import keras
 import keras.preprocessing.image
 import tensorflow as tf
@@ -74,6 +75,8 @@ def model_with_weights(model, weights, skip_mismatch):
     """
     if weights is not None:
         model.load_weights(weights, by_name=True, skip_mismatch=skip_mismatch)
+    else:
+        pass
     return model
 
 
@@ -352,10 +355,15 @@ def main(args=None):
             anchor_params = parse_anchor_parameters(args.config)
         prediction_model = retinanet_bbox(model=model, anchor_params=anchor_params)
     else:
+        print(args.backbone)
         weights = args.weights
         # default to imagenet if nothing else is specified
         if weights is None and args.imagenet_weights:
-            weights = backbone.download_imagenet()
+            if not 'resnet34' in args.backbone:
+                weights = backbone.download_imagenet()
+            else:
+                print('resnet34 loaded pretrained')
+                weights = None
 
         print('Creating model, this may take a second...')
         model, training_model, prediction_model = create_models(

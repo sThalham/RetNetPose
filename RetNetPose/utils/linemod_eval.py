@@ -169,35 +169,35 @@ threeD_boxes[14, :, :] = np.array([[0.047, 0.0735, 0.0925],  # phone [94, 147, 1
 model_dia = np.array([0.10209865663, 0.24750624233, 0.16735486092, 0.17249224865, 0.20140358597, 0.15454551808, 0.12426430816, 0.26147178102, 0.10899920102, 0.16462758848, 0.17588933422, 0.14554287471, 0.27807811733, 0.28260129399, 0.21235825148])
 
 
-def get_evaluation(pcd_temp_, pcd_scene_, inlier_thres, tf, final_th=0, n_iter=5):#queue
+def get_evaluation(pcd_temp_,pcd_scene_,inlier_thres_m,tf,final_th,n_iter=5):#queue
     tf_pcd =np.eye(4)
 
-    reg_p2p = open3d.registration_icp(pcd_temp_, pcd_scene_ , inlier_thres, np.eye(4),
+    reg_p2p = open3d.registration_icp(pcd_temp_,pcd_scene_ , inlier_thres_m, np.eye(4),
               open3d.TransformationEstimationPointToPoint(),
-              open3d.ICPConvergenceCriteria(max_iteration=1)) #5?
-    tf = np.matmul(reg_p2p.transformation, tf)
+              open3d.ICPConvergenceCriteria(max_iteration = 5)) #5?
+    tf = np.matmul(reg_p2p.transformation,tf)
     tf_pcd = np.matmul(reg_p2p.transformation,tf_pcd)
     pcd_temp_.transform(reg_p2p.transformation)
+    #open3d.draw_geometries([tf_pcd])
 
     for i in range(4):
-        inlier_thres = reg_p2p.inlier_rmse*3
-        if inlier_thres == 0:
-            continue
-
+        inlier_thres = reg_p2p.inlier_rmse*2
+        if inlier_thres == 0.0:
+            inlier_thres = inlier_thres_m
         reg_p2p = open3d.registration_icp(pcd_temp_,pcd_scene_ , inlier_thres, np.eye(4),
                   open3d.TransformationEstimationPointToPlane(),
-                  open3d.ICPConvergenceCriteria(max_iteration=1)) #5?
-        tf = np.matmul(reg_p2p.transformation, tf)
-        tf_pcd = np.matmul(reg_p2p.transformation, tf_pcd)
+                  open3d.ICPConvergenceCriteria(max_iteration = 5)) #5?
+        tf = np.matmul(reg_p2p.transformation,tf)
+        tf_pcd = np.matmul(reg_p2p.transformation,tf_pcd)
         pcd_temp_.transform(reg_p2p.transformation)
     inlier_rmse = reg_p2p.inlier_rmse
 
     ##Calculate fitness with depth_inlier_th
     if(final_th>0):
         inlier_thres = final_th #depth_inlier_th*2 #reg_p2p.inlier_rmse*3
-        reg_p2p = registration_icp(pcd_temp_,pcd_scene_, inlier_thres, np.eye(4),
-                  TransformationEstimationPointToPlane(),
-                  ICPConvergenceCriteria(max_iteration = 1)) #5?
+        reg_p2p = open3d.registration_icp(pcd_temp_,pcd_scene_, inlier_thres, np.eye(4),
+                  open3d.TransformationEstimationPointToPlane(),
+                  open3d.ICPConvergenceCriteria(max_iteration = 5)) #5?
 
     if( np.abs(np.linalg.det(tf[:3,:3])-1)>0.001):
         tf[:3,0]=tf[:3,0]/np.linalg.norm(tf[:3,0])
@@ -226,12 +226,13 @@ def load_pcd(cat):
     model_vsd = ply_loader.load_ply(ply_path)
     pcd_model = open3d.PointCloud()
     pcd_model.points = open3d.Vector3dVector(model_vsd['pts'])
+    pcd_model = open3d.voxel_down_sample(pcd_model, voxel_size=0.005)
     open3d.estimate_normals(pcd_model, search_param=open3d.KDTreeSearchParamHybrid(
-        radius=0.1, max_nn=30))
+            radius=0.01, max_nn=5))
     # open3d.draw_geometries([pcd_model])
     model_vsd_mm = copy.deepcopy(model_vsd)
     model_vsd_mm['pts'] = model_vsd_mm['pts'] * 1000.0
-    pcd_model = open3d.read_point_cloud(ply_path)
+    #pcd_model = open3d.read_point_cloud(ply_path)
 
     return pcd_model, model_vsd, model_vsd_mm
 
@@ -365,6 +366,9 @@ def evaluate_linemod(generator, model, threshold=0.05):
         image_raw = generator.load_image(index)
         image = generator.preprocess_image(image_raw)
         image, scale = generator.resize_image(image)
+
+        depth_path = generator.load_image_dep(index)
+        depth_img = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED)
 
         if keras.backend.image_data_format() == 'channels_first':
             image = image.transpose((2, 0, 1))
@@ -547,14 +551,39 @@ def evaluate_linemod(generator, model, threshold=0.05):
                         R_est, _ = cv2.Rodrigues(orvec)
                         t_est = otvec
 
-                        rot = tf3d.quaternions.mat2quat(R_est)
-                        #pose = np.concatenate(
-                        #            (np.array(t_est[:, 0], dtype=np.float32), np.array(rot, dtype=np.float32)), axis=0)
+                        #
+                        pcd_img = create_point_cloud(depth_img, 0.001)
+                        pcd_img = pcd_img.reshape((480, 640, 3))[int(b1[1]):int(b1[3]), int(b1[0]):int(b1[2]), :]
+                        pcd_img = pcd_img.reshape((pcd_img.shape[0] * pcd_img.shape[1], 3))
+                        pcd_crop = open3d.PointCloud()
+                        pcd_crop.points = open3d.Vector3dVector(pcd_img)
+                        pcd_crop = open3d.voxel_down_sample(pcd_crop, voxel_size=0.005)
+                        open3d.estimate_normals(pcd_crop, search_param=open3d.KDTreeSearchParamHybrid(
+                            radius=0.01, max_nn=5))
 
+                        #pcd_crop.paint_uniform_color(np.array([0.99, 0.0, 0.00]))
+                        open3d.draw_geometries([pcd_crop])
+
+                        guess = np.zeros((4, 4), dtype=np.float32)
+                        guess[:3, :3] = R_est
+                        guess[:3, 3] = t_est.T
+                        guess[3, :] = np.array([0.0, 0.0, 0.0, 1.0], dtype=np.float32).T
+
+                        point_cloud.transform(guess)
+                        #open3d.draw_geometries([point_guess])
+
+                        tf, rmse_in, tf_pcd, fitness = get_evaluation(point_cloud, pcd_crop,model_dia[cls - 1],guess,0)
+                        R_icp = tf[0:3, 0:3]
+                        t_icp = tf[0:3, 3]
+
+                        point_cloud.transform(tf)
+                        open3d.draw_geometries([point_cloud])
 
                         t_rot = tf3d.euler.euler2mat(t_rot[0], t_rot[1], t_rot[2])
                         R_gt = np.array(t_rot, dtype=np.float32).reshape(3, 3)
                         t_gt = np.array(t_tra, dtype=np.float32) * 0.001
+
+
 
                         rd = re(R_gt, R_est)
                         xyz = te(t_gt, t_est.T)
@@ -727,8 +756,10 @@ def evaluate_linemod(generator, model, threshold=0.05):
 
                         #else:
                         err_add = add(R_est, t_est, R_gt, t_gt, model_vsd["pts"])
+                        print('ADD/S score:', err_add)
 
-                        print(err_add)
+                        icp_add = add(R_icp, t_icp, R_gt, t_gt, model_vsd["pts"])
+                        print('ADD/S after ICP: ', icp_add)
 
                         if not math.isnan(err_add):
                             if err_add < (model_dia[cls - 1] * 0.1):

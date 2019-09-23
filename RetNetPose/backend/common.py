@@ -86,7 +86,33 @@ def box3D_transform_inv(boxes, deltas, mean=None, std=None):
     y8 = boxes_exp[:, :, :, 3] + (deltas[:, :, :, 15] * std[15] + mean[15]) * height
 
     pred_boxes = keras.backend.stack([x1, y1, x2, y2, x3, y3, x4, y4, x5, y5, x6, y6, x7, y7, x8, y8], axis=3)
-    #pred_boxes = tf.Print(pred_boxes, [tf.shape(pred_boxes)])
+
+    return pred_boxes
+
+
+def heatmap_transform_inv(boxes, deltas):
+
+    width = boxes[:, :, 2] - boxes[:, :, 0]
+    height = boxes[:, :, 3] - boxes[:, :, 1]
+
+    x1 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 0], axis=2)) / 64) * width
+    y1 = boxes[:, :, 1] + (numpy.where(np.argmax(deltas[:, :, :, :, 0], axis=3)) / 64) * height
+    x2 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 1], axis=2)) / 64) * width
+    y2 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 1], axis=3)) / 64) * height
+    x3 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 2], axis=2)) / 64) * width
+    y3 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 2], axis=3)) / 64) * height
+    x4 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 3], axis=2)) / 64) * width
+    y4 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 3], axis=3)) / 64) * height
+    x5 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 4], axis=2)) / 64) * width
+    y5 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 4], axis=3)) / 64) * height
+    x6 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 5], axis=2)) / 64) * width
+    y6 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 5], axis=3)) / 64) * height
+    x7 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 6], axis=2)) / 64) * width
+    y7 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 6], axis=3)) / 64) * height
+    x8 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 7], axis=2)) / 64) * width
+    y8 = boxes[:, :, 0] + (numpy.where(np.argmax(deltas[:, :, :, :, 7], axis=3)) / 64) * height
+
+    pred_boxes = keras.backend.stack([x1, y1, x2, y2, x3, y3, x4, y4, x5, y5, x6, y6, x7, y7, x8, y8], axis=2)
 
     return pred_boxes
 
