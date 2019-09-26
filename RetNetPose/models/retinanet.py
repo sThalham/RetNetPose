@@ -199,7 +199,7 @@ def default_regression_model(num_values, num_anchors, pyramid_feature_size=256, 
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
 
-def default_3Dregression_model(num_values, num_anchors, num_classes, pyramid_feature_size=256, regression_feature_size=256, name='3Dregression_submodel'):
+def default_3Dregression_model(num_values, num_anchors, num_classes, num_features, pyramid_feature_size=256, regression_feature_size=256, name='3Dregression_submodel'):
     """ Creates the default regression submodel.
 
     Args
@@ -237,73 +237,19 @@ def default_3Dregression_model(num_values, num_anchors, num_classes, pyramid_fea
             **options
         )(outputs)
 
-    #outputs = keras.layers.Conv2D(num_anchors * num_classes * num_values, name='pyramid_regression3D', **options)(outputs)
-    outputs = keras.layers.Conv2D(num_anchors * num_values, name='pyramid_regression3D', **options)(outputs)
+    outputs_R = keras.layers.Conv2D(num_anchors * num_values, name='pyramid_regression3D', **options)(outputs)
     if keras.backend.image_data_format() == 'channels_first':
-        outputs = keras.layers.Permute((2, 3, 1), name='pyramid_regression3D_permute')(outputs)
-    #outputs = keras.layers.Reshape((-1, num_classes, num_values), name='pyramid_regression3D_reshape')(outputs)
-    outputs = keras.layers.Reshape((-1, num_values), name='pyramid_regression3D_reshape')(outputs)
+        outputs_R = keras.layers.Permute((2, 3, 1), name='pyramid_regression3D_permute')(outputs_R)
+    outputs_R = keras.layers.Reshape((-1, num_values), name='pyramid_regression3D_reshape')(outputs_R)
 
-    return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
-
-
-def separate_3Dregression_model(num_values, num_anchors, num_classes, pyramid_feature_size=256, regression_feature_size=256, name='sep3Dregression_submodel'):
-    """ Creates the default regression submodel.
-
-    Args
-        num_values              : Number of values to regress.
-        num_anchors             : Number of anchors to regress for each feature level.
-        pyramid_feature_size    : The number of filters to expect from the feature pyramid levels.
-        regression_feature_size : The number of filters to use in the layers in the regression submodel.
-        name                    : The name of the submodel.
-
-    Returns
-        A keras.models.Model that predicts regression values for each anchor.
-    """
-    # All new conv layers except the final one in the
-    # RetinaNet (classification) subnets are initialized
-    # with bias b = 0 and a Gaussian weight fill with stddev = 0.01.
-    options = {
-        'kernel_size'        : 3,
-        'strides'            : 1,
-        'padding'            : 'same',
-        'kernel_initializer' : keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
-        'bias_initializer'   : 'zeros',
-        'kernel_regularizer' : keras.regularizers.l2(0.001),
-    }
-
-    print(inputs)
-
+    outputs_C = keras.layers.Conv2D(filters=num_anchors * num_features, name='pyramid_features_selection', **options
+    )(outputs)
     if keras.backend.image_data_format() == 'channels_first':
-        inputs  = keras.layers.Input(shape=(pyramid_feature_size, None, None))
-    else:
-        inputs  = keras.layers.Input(shape=(None, None, pyramid_feature_size))
-    outputs = inputs
+        outputs_C = keras.layers.Permute((2, 3, 1), name='pyramid_feature_selection_permute')(outputs_C)
+    outputs_C = keras.layers.Reshape((-1, num_features), name='pyramid_feature_selection_reshape')(outputs_C)
+    outputs_C = keras.layers.Activation('sigmoid', name='pyramid_feature_selection_sigmoid')(outputs_C)
 
-    output_list = []
-
-    for i in range(4):
-        outputs = keras.layers.Conv2D(
-            filters=regression_feature_size,
-            activation='relu',
-            name='pyramid_regression3D_{}_{}'.format(c, i),
-            **options
-        )(outputs)
-
-    for c in range(num_classes):
-        outputs_cls = keras.layers.Conv2D(num_anchors * num_values, name='pyramid_regression3D_{}'.format(c), **options)(outputs)
-        if keras.backend.image_data_format() == 'channels_first':
-            outputs_cls = keras.layers.Permute((2, 3, 1), name='pyramid_regression3D_permute_{}'.format(c))(outputs_cls)
-        outputs_cls = keras.layers.Reshape((-1, num_values), name='pyramid_regression3D_reshape_{}'.format(c))(outputs_cls)
-        output_list.append(outputs_cls)
-
-    #outputs = keras.backend.expand_dims(outputs, axis=2)
-    outputs = keras.layers.concatenate(output_list, axis=2)
-    outputs = keras.layers.Reshape((-1, num_classes, num_values), name='pyramid_regression3D_reshape')(outputs)
-
-    print(outputs.shape)
-
-    return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
+    return keras.models.Model(inputs=inputs, outputs=outputs_R, name=name+'_reg'), keras.models.Model(inputs=inputs, outputs=outputs_C, name=name+'_cls') 
 
 
 def __create_pyramid_features(C3, C4, C5, feature_size=256):
@@ -356,11 +302,13 @@ def default_submodels(num_classes, num_anchors):
     Returns
         A list of tuple, where the first element is the name of the submodel and the second element is the submodel itself.
     """
+    pose_reg, pose_cls = default_3Dregression_model(16, num_anchors, 15, 8)
+
     return [
         ('bbox', default_regression_model(4, num_anchors)),
-        ('3Dbox', default_3Dregression_model(16, num_anchors, 15)),
+        ('3Dbox', pose_reg),
         ('cls', default_classification_model(num_classes, num_anchors)),
-        ('feat', default_features_model(num_classes, num_anchors, 8))
+        ('feat', pose_cls)
     ]
 
 

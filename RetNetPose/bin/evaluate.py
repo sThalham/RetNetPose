@@ -79,6 +79,16 @@ def create_generator(args):
             image_max_side=args.image_max_side,
             config=args.config
         )
+    elif args.dataset_type == 'linemod_featsel':
+        from ..preprocessing.linemod_featsel import LinemodFeatselGenerator
+
+        validation_generator = LinemodFeatselGenerator(
+            args.linemod_featsel_path,
+            'val',
+            image_min_side=args.image_min_side,
+            image_max_side=args.image_max_side,
+            config=args.config
+        )
     else:
         raise ValueError('Invalid data type received: {}'.format(args.dataset_type))
 
@@ -100,6 +110,9 @@ def parse_args(args):
 
     linemod_parser = subparsers.add_parser('occlusion')
     linemod_parser.add_argument('occlusion_path', help='Path to dataset directory (ie. /tmp/Occlusion).')
+
+    linemod_featsel_parser = subparsers.add_parser('linemod_featsel')
+    linemod_featsel_parser.add_argument('linemod_featsel_path', help='Path to dataset directory (ie. /tmp/LineMOD_featsel).')
 
     parser.add_argument('model',              help='Path to RetinaNet model.')
     parser.add_argument('--convert-model',    help='Convert the model to an inference model (ie. the input is a training model).', action='store_true')
@@ -184,6 +197,18 @@ def main(args=None):
         print('reprojection below 5 pixel:  ', less_repr_5, '%')
         print('ADD below model diameter:    ', less_add_d, '%')
         print('F1 ADD < 0.15d:              ', F1_add_015, '%')
+
+    elif args.dataset_type == 'linemod_featsel':
+        from ..utils.linemod_eval_featsel import evaluate_linemod_featsel
+        dataset_recall, dataset_precision, less55, less_vsd_t, less_repr_5, less_add_d, F1_add_015 = evaluate_linemod_featsel(generator, model, args.score_threshold)
+        print('RESULTS LINEMOD')
+        print('dataset recall:              ', dataset_recall, '%')
+        print('dataset precision:           ', dataset_precision, '%')
+        print('poses below 5cm and 5°:      ', less55, '%')
+        print('VSD below tau 0.02m:         ', less_vsd_t, '%')
+        print('reprojection below 5 pixel:  ', less_repr_5, '%')
+        print('ADD below model diameter:    ', less_add_d, '%')
+        print('F1 ADD < 0.15d:              ', F1_add_015, '%')  
 
     else:
          average_precisions = evaluate(

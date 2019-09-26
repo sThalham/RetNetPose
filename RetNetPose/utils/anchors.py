@@ -122,6 +122,7 @@ def anchor_targets_bbox(
 
             # compute target class labels
             labels_batch[index, positive_indices, annotations['labels'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
+            #features_batch[index, positive_indices, annotations['features'][argmax_overlaps_inds[positive_indices]].astype(int)] = 1
 
             features_batch[index, :, :-1] = features_transform(anchors, annotations['features'][argmax_overlaps_inds, :])
 
